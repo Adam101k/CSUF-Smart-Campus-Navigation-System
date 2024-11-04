@@ -2,6 +2,7 @@
 # Date: 11/04/2024
 
 # Importing the necessary libraries
+import math
 import tkinter as tk
 from tkinter import messagebox
 import networkx as nx
@@ -15,7 +16,8 @@ ax.imshow(img, extent=[0, 7084, 0, 9167])
 
 # Define nodes with example coordinates (x, y) and add them to graph
 nodes = {
-    # Buildings
+    # Buildings/Points of Interest
+    "A": (1216, 7566),
     "AD": (3550, 2366),
     "AF": (3277, 6895),
     "ASC": (355, 3906),
@@ -31,6 +33,7 @@ nodes = {
     "EC": (3567, 3923),
     "ENPS": (4925, 3691),
     "ESPS": (4900, 3186),
+    "G": (2532, 8269),
     "GAH": (951, 4527),
     "GAS": (4751, 5049),
     "GC": (2168, 2822),
@@ -70,88 +73,118 @@ nodes = {
     "W4": (3146, 6360),
     "W5": (2930, 6012),
     "W6": (2922, 5337),
-    "W7": (3413, 5326)
+    "W7": (3413, 5326),
+    "W8": (2862, 8642),
+    "W9": (1837, 8443),
+    "W10": (2938, 7905),
+    "W11": (744, 6978),
+    "W12": (752, 5951),
+    "W13": (769, 5330),
+    "W14": (752, 4055),
+    "W15": (760, 2838),
+    "W16": (777, 1679),
+    "W17": (1522, 1754),
+    "W18": (2358, 1894),
+    "W19": (4287, 1894),
+    "W20": (628, 8062),
+    "W21": (2350, 6613),
+    "W22": (3567, 1870),
+    "W23": (1671, 7011),
+    "W24": (1911, 5951),
+    "W25": (2689, 7317),
+    "W26": (3368, 7706),
+    "W27": (3666, 6721),
+    "W28": (3757, 5728),
+    "W29": (4560, 4908),
+    "W30": (4552, 4353),
+    "W31": (4569, 3997),
+    "W32": (4552, 3832),
+    "W33": (4105, 3823),
+    "W34": (3666, 3749),
+    "W35": (3327, 2863),
+    "W36": (3318, 3343),
+    "W37": (2226, 5338),
+    "W38": (3029, 3633),
+    "W39": (2830, 3352),
+    "W40": (3004, 3004),
+    "W41": (2615, 3078),
+    "W42": (1919, 3095),
+    "W43": (1762, 3327),
+    "W44": (1861, 3790),
+    "W45": (1249, 2871),
+    "W46": (1555, 2871),
+    "W47": (2408, 3956),
+    "W48": (2847, 3625),
+    "W49": (3277, 3616),
+    "W50": (3310, 3020),
+    "W51": (2441, 4428),
+    "W52": (2789, 4544),
+    "W53": (3227, 4660),
+    "W54": (3501, 4726),
+    "W55": (3939, 4759),
+    "W56": (4039, 4941),
+    "W57": (4627, 2871),
+    "W58": (4486, 2706),
+    "W59": (3989, 3012),
+    "W60": (3948, 3492),
+    "W61": (4320, 2226),
+    "W62": (2557, 5338),
+    "W63": (2913, 5711),
+    "W64": (3029, 1878),
+    "W65": (2159, 2507),
+    "W66": (1787, 7657),
+    "W67": (2764, 7052),
+    "W68": (3517, 7276),
+    "W69": (3749, 6208),
+    "W70": (2830, 3029),
+    "W71": (3023, 2681),
+    "W72": (2780, 2656),
+    "W73": (2457, 2664),
+    "W74": (4271, 4941),
+    "W75": (2813, 4246),
+    "W76": (3277, 4270),
+    "W77": (2052, 4850),
+    "W78": (2027, 4585),
+    "W79": (1588, 4593),
+    "W80": (1563, 4428),
+    "W81": (1082, 4444),
+    "W82": (1058, 4072),
+    "W83": (744, 4726),
+    "W84": (4569, 3426)
 }
 
 # Define stock edges with only distances
 # Edges Define as (node1, node2, distance in feet, time in minutes, and accessibility)
-edges = [
-    ("AD", "AF", 500),
-    ("AD", "ASC", 200),
-    ("AD", "CJ", 300),
-    ("AF", "GF", 250),
-    ("AF", "TSC", 400),
-    ("ASC", "TH", 150),
-    ("ASC", "TSU", 350),
-    ("B", "KHS", 100),
-    ("B", "PL", 300),
-    ("CC", "CY", 150),
-    ("CC", "TSU", 250),
-    ("CJ", "GH", 200),
-    ("CJ", "LH", 300),
-    ("CP", "SGMH", 250),
-    ("CP", "MC", 400),
-    ("CPAC", "GC", 150),
-    ("CS", "E", 300),
-    ("CS", "EC", 400),
-    ("CY", "SCPS", 200),
-    ("CY", "SRC", 350),
-    ("DBH", "LH", 200),
-    ("DBH", "MH", 300),
-    ("E", "RG", 150),
-    ("E", "GAS", 250),
-    ("EC", "GH", 200),
-    ("ENPS", "ESPS", 250),
-    ("ENPS", "GAH", 300),
-    ("GF", "TS", 200),
-    ("GF", "TSC", 350),
-    ("GH", "H", 150),
-    ("H", "KHS", 200),
-    ("HRE", "RH", 250),
-    ("HRE", "SHCC", 300),
-    ("KHS", "TG", 150),
-    ("LH", "MC", 200),
-    ("MC", "MH", 250),
-    ("MS", "T", 200),
-    ("MS", "SHCC", 350),
-    ("NPS", "VA", 150),
-    ("NPS", "GC", 200),
-    ("P", "CY", 250),
-    ("PL", "TG", 150),
-    ("PL", "T", 300),
-    ("RG", "RH", 200),
-    ("RG", "SHCC", 350),
-    ("SCPS", "SRC", 250),
-    ("SGMH", "MC", 200),
-    ("SGMH", "CP", 300),
-    ("SHCC", "T", 200),
-    ("SHCC", "TG", 350),
-    ("SRC", "UP", 250),
-    ("T", "TG", 150),
-    ("TG", "TSC", 300),
-    ("TH", "VA", 200),
-    ("TS", "TSC", 150),
-    ("TSF", "TSC", 250),
-    ("TTC", "TTF", 300),
-    ("TTF", "TSF", 200),
-    ("UP", "P", 150),
-    ("VA", "TH", 250),
-]
 
-# Plot nodes
-for node, (x, y) in nodes.items():
-    ax.scatter(x, y, s=5, label=node)  # Scatter plot each node
 
-# Plot edges with distances
+# Function to calculate Euclidean distance between two points
+def calculate_distance(coord1, coord2):
+    return math.sqrt((coord1[0] - coord2[0]) ** 2 + (coord1[1] - coord2[1]) ** 2)
+
+# Generate edges based on the three closest nodes for each node
+edges = []
+for node1 in nodes:
+    distances = []
+    for node2 in nodes:
+        if node1 != node2:
+            distance = calculate_distance(nodes[node1], nodes[node2])
+            distances.append((node2, distance))
+    # Sort distances and select the three closest nodes
+    distances.sort(key=lambda x: x[1])
+    closest_nodes = distances[:3]  # Adjust this number to add more or fewer connections
+    for node2, distance in closest_nodes:
+        edges.append((node1, node2, int(distance)))  # Add edge with integer distance
+
+# Plot edges first (so they appear under the nodes)
 for node1, node2, distance in edges:
     x_values = [nodes[node1][0], nodes[node2][0]]
     y_values = [nodes[node1][1], nodes[node2][1]]
-    ax.plot(x_values, y_values, 'k-', lw=1)
-    mid_x, mid_y = (x_values[0] + x_values[1]) / 2, (y_values[0] + y_values[1]) / 2
-    ax.text(mid_x, mid_y, str(distance),fontsize = 6, color="blue")  # Annotate with distance
+    ax.plot(x_values, y_values, lw=1, color="black", zorder=1)  # Plot edges in black with low zorder
 
-# Show legend outside the plot
-plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left', borderaxespad=0.)
+# Plot nodes with color distinction and higher zorder
+for node, (x, y) in nodes.items():
+    color = "green" if node.startswith("W") else "red"  # Waypoints in green, other nodes in red
+    ax.scatter(x, y, s=15, color=color, label=node, zorder=2)  # Scatter plot each node with specified color and high zorder
 
 # Show plot
 plt.show()

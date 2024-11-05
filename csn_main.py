@@ -14,6 +14,15 @@ img = plt.imread("CSUF-Smart-Campus-Navigation-System/campus_map.png")
 fig, ax = plt.subplots()
 ax.imshow(img, extent=[0, 7084, 0, 9167])
 
+
+# Function to calculate Euclidean distance between two points
+def calculate_distance(coord1, coord2):
+    return math.sqrt((coord1[0] - coord2[0]) ** 2 + (coord1[1] - coord2[1]) ** 2)
+
+# Wheelchair Regions
+accessible_x_min, accessible_x_max = 1000, 4000
+accessible_y_min, accessible_y_max = 3000, 7000
+
 # Define nodes with example coordinates (x, y) and add them to graph
 nodes = {
     # Buildings/Points of Interest
@@ -157,10 +166,6 @@ nodes = {
 # Edges Define as (node1, node2, distance in feet, time in minutes, and accessibility)
 
 
-# Function to calculate Euclidean distance between two points
-def calculate_distance(coord1, coord2):
-    return math.sqrt((coord1[0] - coord2[0]) ** 2 + (coord1[1] - coord2[1]) ** 2)
-
 # Generate edges based on the three closest nodes for each node
 edges = []
 for node1 in nodes:
@@ -169,22 +174,158 @@ for node1 in nodes:
         if node1 != node2:
             distance = calculate_distance(nodes[node1], nodes[node2])
             distances.append((node2, distance))
-    # Sort distances and select the three closest nodes
     distances.sort(key=lambda x: x[1])
-    closest_nodes = distances[:3]  # Adjust this number to add more or fewer connections
-    for node2, distance in closest_nodes:
-        edges.append((node1, node2, int(distance)))  # Add edge with integer distance
+    closest_nodes = distances[:3]
+    for i, (node2, distance) in enumerate(closest_nodes):
+        time = i + 1
+        accessibility = (
+            "Accessible" if (accessible_x_min <= nodes[node1][0] <= accessible_x_max and
+                             accessible_y_min <= nodes[node1][1] <= accessible_y_max)
+            else "Not Accessible"
+        )
+        edges.append((node1, node2, int(distance), time, accessibility))
 
-# Plot edges first (so they appear under the nodes)
-for node1, node2, distance in edges:
-    x_values = [nodes[node1][0], nodes[node2][0]]
-    y_values = [nodes[node1][1], nodes[node2][1]]
-    ax.plot(x_values, y_values, lw=1, color="black", zorder=1)  # Plot edges in black with low zorder
+# BFS function with criteria filters
+def bfs(start, end, use_distance, use_time, use_accessibility):
+    queue = [(start, [start])]
+    visited = set()
 
-# Plot nodes with color distinction and higher zorder
-for node, (x, y) in nodes.items():
-    color = "green" if node.startswith("W") else "red"  # Waypoints in green, other nodes in red
-    ax.scatter(x, y, s=15, color=color, label=node, zorder=2)  # Scatter plot each node with specified color and high zorder
+    while queue:
+        current, path = queue.pop(0)
+        if current == end:
+            return path
+        
+        visited.add(current)
+        for node1, node2, distance, time, accessibility in edges:
+            if node1 == current and node2 not in visited:
+                if ((use_distance and distance <= 1000) or not use_distance) and \
+                   ((use_time and time <= 2) or not use_time) and \
+                   ((use_accessibility and accessibility == "Accessible") or not use_accessibility):
+                    queue.append((node2, path + [node2]))
+    
+    return None
 
-# Show plot
-plt.show()
+# DFS function with criteria filters
+def dfs(start, end, use_distance, use_time, use_accessibility, path=None, visited=None):
+    if path is None:
+        path = [start]
+    if visited is None:
+        visited = set()
+
+    visited.add(start)
+    if start == end:
+        return path
+
+    for node1, node2, distance, time, accessibility in edges:
+        if node1 == start and node2 not in visited:
+            if ((use_distance and distance <= 1000) or not use_distance) and \
+               ((use_time and time <= 2) or not use_time) and \
+               ((use_accessibility and accessibility == "Accessible") or not use_accessibility):
+                result = dfs(node2, end, use_distance, use_time, use_accessibility, path + [node2], visited)
+                if result:
+                    return result
+
+    visited.remove(start)
+    return None
+
+# GUI setup
+class GraphTraversalApp:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Graph Traversal with BFS and DFS")
+
+        # Input for start and end nodes
+        tk.Label(root, text="Start Node:").grid(row=0, column=0)
+        self.start_entry = tk.Entry(root)
+        self.start_entry.grid(row=0, column=1)
+
+        tk.Label(root, text="End Node:").grid(row=0, column=2)
+        self.end_entry = tk.Entry(root)
+        self.end_entry.grid(row=0, column=3)
+
+        # Checkboxes for toggles
+        self.use_distance = tk.BooleanVar()
+        tk.Checkbutton(root, text="Use Distance", variable=self.use_distance).grid(row=1, column=0)
+
+        self.use_time = tk.BooleanVar()
+        tk.Checkbutton(root, text="Use Time", variable=self.use_time).grid(row=1, column=1)
+
+        self.use_accessibility = tk.BooleanVar()
+        tk.Checkbutton(root, text="Use Accessibility", variable=self.use_accessibility).grid(row=1, column=2)
+
+        # Buttons to start BFS and DFS
+        tk.Button(root, text="Find Path (BFS)", command=self.find_path_bfs).grid(row=2, column=0)
+        tk.Button(root, text="Find Path (DFS)", command=self.find_path_dfs).grid(row=2, column=1)
+
+        # Canvas for matplotlib figure
+        self.fig, self.ax = plt.subplots(figsize=(8, 6))
+        self.canvas = FigureCanvasTkAgg(self.fig, master=root)
+        self.canvas.get_tk_widget().grid(row=3, column=0, columnspan=4)
+        
+        # Display the initial graph
+        self.update_graph()
+
+    # Function to highlight the path on the graph
+    def highlight_path(self, path):
+        self.ax.clear()
+        self.update_graph(base_only=True)
+        for i in range(len(path) - 1):
+            node1, node2 = path[i], path[i+1]
+            x_values = [nodes[node1][0], nodes[node2][0]]
+            y_values = [nodes[node1][1], nodes[node2][1]]
+            self.ax.plot(x_values, y_values, color="blue", lw=2, zorder=3)
+        self.canvas.draw()
+
+    # Function to update the graph visualization
+    def update_graph(self, base_only=False):
+        self.ax.imshow(img, extent=[0, 7084, 0, 9167])
+        
+        # Draw all edges in the graph
+        if not base_only:
+            for node1, node2, distance, time, accessibility in edges:
+                x_values = [nodes[node1][0], nodes[node2][0]]
+                y_values = [nodes[node1][1], nodes[node2][1]]
+                self.ax.plot(x_values, y_values, color="black", lw=1, zorder=1)
+
+        # Draw nodes with accessibility distinction
+        for node, (x, y) in nodes.items():
+            color = "green" if node.startswith("W") else "red"
+            self.ax.scatter(x, y, s=15, color=color, label=node, zorder=2)
+        
+        self.canvas.draw()
+
+    # Function to find path using BFS
+    def find_path_bfs(self):
+        start = self.start_entry.get()
+        end = self.end_entry.get()
+        if start and end and start in nodes and end in nodes:
+            path = bfs(start, end, self.use_distance.get(), self.use_time.get(), self.use_accessibility.get())
+            if path:
+                self.highlight_path(path)
+                messagebox.showinfo("BFS Path", f"Path found: {' -> '.join(path)}")
+            else:
+                messagebox.showinfo("BFS Path", "No path found.")
+        else:
+            messagebox.showerror("Error", "Please enter valid start and end nodes.")
+
+    # Function to find path using DFS
+    def find_path_dfs(self):
+        start = self.start_entry.get()
+        end = self.end_entry.get()
+        if start and end and start in nodes and end in nodes:
+            path = dfs(start, end, self.use_distance.get(), self.use_time.get(), self.use_accessibility.get())
+            if path:
+                self.highlight_path(path)
+                messagebox.showinfo("DFS Path", f"Path found: {' -> '.join(path)}")
+            else:
+                messagebox.showinfo("DFS Path", "No path found.")
+        else:
+            messagebox.showerror("Error", "Please enter valid start and end nodes.")
+
+# Load campus map as background
+img = plt.imread("CSUF-Smart-Campus-Navigation-System/campus_map.png")
+
+# Initialize the GUI application
+root = tk.Tk()
+app = GraphTraversalApp(root)
+root.mainloop()

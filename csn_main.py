@@ -1,8 +1,11 @@
 # Written By Adam Kaci
 # Date: 11/04/2024
 
-# Importing the necessary libraries
+# Import necessary libraries
 import math
+import threading
+import time as timing
+import tracemalloc  # For tracking memory usage
 import tkinter as tk
 from tkinter import messagebox
 import networkx as nx
@@ -13,7 +16,6 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 img = plt.imread("CSUF-Smart-Campus-Navigation-System/campus_map.png")
 fig, ax = plt.subplots()
 ax.imshow(img, extent=[0, 7084, 0, 9167])
-
 
 # Function to calculate Euclidean distance between two points
 def calculate_distance(coord1, coord2):
@@ -167,7 +169,7 @@ nodes = {
 
 
 # Generate edges based on the three closest nodes for each node
-edges = []
+edges = {}
 for node1 in nodes:
     distances = []
     for node2 in nodes:
@@ -183,56 +185,96 @@ for node1 in nodes:
                              accessible_y_min <= nodes[node1][1] <= accessible_y_max)
             else "Not Accessible"
         )
-        edges.append((node1, node2, int(distance), time, accessibility))
+        edges.setdefault(node1, []).append((node2, int(distance), time, accessibility))
 
-# BFS function with criteria filters
-def bfs(start, end, use_distance, use_time, use_accessibility):
+# BFS with optimized visualization, performance tracking, and memory usage
+def bfs_real_time(start, end, use_distance, use_time, use_accessibility, app):
     queue = [(start, [start])]
     visited = set()
+    
+    # Start timing and memory tracking for BFS
+    start_time = timing.perf_counter()
+    tracemalloc.start()
 
-    while queue:
+    def bfs_step():
+        if not queue:
+            return
         current, path = queue.pop(0)
         if current == end:
-            return path
-        
+            # End timing and memory tracking
+            end_time = timing.perf_counter()
+            current_memory, peak_memory = tracemalloc.get_traced_memory()
+            tracemalloc.stop()
+            
+            # Update path on GUI
+            app.highlight_path(path, app.ax_bfs)
+            duration = (end_time - start_time) * 1000  # Convert seconds to milliseconds
+            app.root.after(0, lambda: messagebox.showinfo(
+                "BFS Performance", 
+                f"BFS completed in {duration:.2f} ms\n"
+                f"Current memory usage: {current_memory / 1024:.2f} KB\n"
+                f"Peak memory usage: {peak_memory / 1024:.2f} KB"
+            ))
+            return
         visited.add(current)
-        for node1, node2, distance, time, accessibility in edges:
-            if node1 == current and node2 not in visited:
+        for node2, distance, time, accessibility in edges.get(current, []):
+            if node2 not in visited:
                 if ((use_distance and distance <= 1000) or not use_distance) and \
                    ((use_time and time <= 2) or not use_time) and \
                    ((use_accessibility and accessibility == "Accessible") or not use_accessibility):
                     queue.append((node2, path + [node2]))
-    
-    return None
+                    app.update_edge_color(current, node2, "blue", app.ax_bfs)
+                    app.update_node_color(node2, "blue", app.ax_bfs)
+        app.canvas_bfs.draw_idle()
+        app.root.after(10, bfs_step)
 
-# DFS function with criteria filters
-def dfs(start, end, use_distance, use_time, use_accessibility, path=None, visited=None):
+    bfs_step()
+
+# DFS with optimized visualization, performance tracking, and memory usage
+def dfs_real_time(start, end, use_distance, use_time, use_accessibility, app, path=None, visited=None):
     if path is None:
         path = [start]
     if visited is None:
         visited = set()
 
-    visited.add(start)
-    if start == end:
-        return path
+    if not hasattr(dfs_real_time, "start_time"):
+        dfs_real_time.start_time = timing.perf_counter()
+        tracemalloc.start()  # Start memory tracking only once
 
-    for node1, node2, distance, time, accessibility in edges:
-        if node1 == start and node2 not in visited:
+    if start == end:
+        end_time = timing.perf_counter()
+        current_memory, peak_memory = tracemalloc.get_traced_memory()
+        tracemalloc.stop()
+
+        duration = (end_time - dfs_real_time.start_time) * 1000  # Convert to milliseconds
+        app.highlight_path(path, app.ax_dfs)
+        app.root.after(0, lambda: messagebox.showinfo(
+            "DFS Performance", 
+            f"DFS completed in {duration:.2f} ms\n"
+            f"Current memory usage: {current_memory / 1024:.2f} KB\n"
+            f"Peak memory usage: {peak_memory / 1024:.2f} KB"
+        ))
+
+        del dfs_real_time.start_time  # Reset for future executions
+        return
+
+    visited.add(start)
+    for node2, distance, time, accessibility in edges.get(start, []):
+        if node2 not in visited:
             if ((use_distance and distance <= 1000) or not use_distance) and \
                ((use_time and time <= 2) or not use_time) and \
                ((use_accessibility and accessibility == "Accessible") or not use_accessibility):
-                result = dfs(node2, end, use_distance, use_time, use_accessibility, path + [node2], visited)
-                if result:
-                    return result
-
-    visited.remove(start)
-    return None
+                visited.add(node2)
+                app.update_edge_color(start, node2, "blue", app.ax_dfs)
+                app.update_node_color(node2, "blue", app.ax_dfs)
+                app.canvas_dfs.draw_idle()
+                app.root.after(10, lambda: dfs_real_time(node2, end, use_distance, use_time, use_accessibility, app, path + [node2], visited))
 
 # GUI setup
 class GraphTraversalApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Graph Traversal with BFS and DFS")
+        self.root.title("Graph Traversal Comparison: BFS vs DFS")
 
         # Input for start and end nodes
         tk.Label(root, text="Start Node:").grid(row=0, column=0)
@@ -253,77 +295,84 @@ class GraphTraversalApp:
         self.use_accessibility = tk.BooleanVar()
         tk.Checkbutton(root, text="Use Accessibility", variable=self.use_accessibility).grid(row=1, column=2)
 
-        # Buttons to start BFS and DFS
-        tk.Button(root, text="Find Path (BFS)", command=self.find_path_bfs).grid(row=2, column=0)
-        tk.Button(root, text="Find Path (DFS)", command=self.find_path_dfs).grid(row=2, column=1)
+        # Button to start traversal
+        tk.Button(root, text="Compare Traversal", command=self.start_traversal).grid(row=2, column=0, columnspan=4)
 
-        # Canvas for matplotlib figure
-        self.fig, self.ax = plt.subplots(figsize=(8, 6))
-        self.canvas = FigureCanvasTkAgg(self.fig, master=root)
-        self.canvas.get_tk_widget().grid(row=3, column=0, columnspan=4)
-        
+        # Two canvases for BFS and DFS comparison
+        self.fig_bfs, self.ax_bfs = plt.subplots(figsize=(5, 5))
+        self.canvas_bfs = FigureCanvasTkAgg(self.fig_bfs, master=root)
+        self.canvas_bfs.get_tk_widget().grid(row=3, column=0, columnspan=2)
+        self.ax_bfs.set_title("BFS Traversal")
+
+        self.fig_dfs, self.ax_dfs = plt.subplots(figsize=(5, 5))
+        self.canvas_dfs = FigureCanvasTkAgg(self.fig_dfs, master=root)
+        self.canvas_dfs.get_tk_widget().grid(row=3, column=2, columnspan=2)
+        self.ax_dfs.set_title("DFS Traversal")
+
         # Display the initial graph
-        self.update_graph()
+        self.update_graph(self.ax_bfs)
+        self.update_graph(self.ax_dfs)
 
-    # Function to highlight the path on the graph
-    def highlight_path(self, path):
-        self.ax.clear()
-        self.update_graph(base_only=True)
+    def start_traversal(self):
+        start = self.start_entry.get()
+        end = self.end_entry.get()
+        if start in nodes and end in nodes:
+            self.clear_paths()  # Clear previous paths before starting
+
+            # Ensures dfs_real_time will have fresh memory and timing tracking
+            if hasattr(dfs_real_time, "start_time"):
+                del dfs_real_time.start_time
+
+            # Run BFS and DFS in separate threads
+            bfs_thread = threading.Thread(target=bfs_real_time, args=(start, end, self.use_distance.get(), self.use_time.get(), self.use_accessibility.get(), self))
+            dfs_thread = threading.Thread(target=dfs_real_time, args=(start, end, self.use_distance.get(), self.use_time.get(), self.use_accessibility.get(), self))
+
+            # Start both threads
+            bfs_thread.start()
+            dfs_thread.start()
+        else:
+            messagebox.showerror("Error", "Please enter valid start and end nodes.")
+
+    def highlight_path(self, path, ax):
+        ax.clear()
+        self.update_graph(ax, base_only=True)
         for i in range(len(path) - 1):
             node1, node2 = path[i], path[i+1]
             x_values = [nodes[node1][0], nodes[node2][0]]
             y_values = [nodes[node1][1], nodes[node2][1]]
-            self.ax.plot(x_values, y_values, color="blue", lw=2, zorder=3)
-        self.canvas.draw()
+            ax.plot(x_values, y_values, color="blue", lw=2, zorder=3)
+        self.canvas_bfs.draw_idle()
+        self.canvas_dfs.draw_idle()
 
-    # Function to update the graph visualization
-    def update_graph(self, base_only=False):
-        self.ax.imshow(img, extent=[0, 7084, 0, 9167])
-        
-        # Draw all edges in the graph
+    def update_graph(self, ax, base_only=False):
+        ax.imshow(img, extent=[0, 7084, 0, 9167])
+
         if not base_only:
-            for node1, node2, distance, time, accessibility in edges:
+            for node1, node2, distance, time, accessibility in [(n1, n2, d, t, a) for n1 in edges for (n2, d, t, a) in edges[n1]]:
                 x_values = [nodes[node1][0], nodes[node2][0]]
                 y_values = [nodes[node1][1], nodes[node2][1]]
-                self.ax.plot(x_values, y_values, color="black", lw=1, zorder=1)
+                ax.plot(x_values, y_values, color="black", lw=1, zorder=1)
 
-        # Draw nodes with accessibility distinction
         for node, (x, y) in nodes.items():
             color = "green" if node.startswith("W") else "red"
-            self.ax.scatter(x, y, s=15, color=color, label=node, zorder=2)
-        
-        self.canvas.draw()
+            ax.scatter(x, y, s=15, color=color, label=node, zorder=2)
 
-    # Function to find path using BFS
-    def find_path_bfs(self):
-        start = self.start_entry.get()
-        end = self.end_entry.get()
-        if start and end and start in nodes and end in nodes:
-            path = bfs(start, end, self.use_distance.get(), self.use_time.get(), self.use_accessibility.get())
-            if path:
-                self.highlight_path(path)
-                messagebox.showinfo("BFS Path", f"Path found: {' -> '.join(path)}")
-            else:
-                messagebox.showinfo("BFS Path", "No path found.")
-        else:
-            messagebox.showerror("Error", "Please enter valid start and end nodes.")
+    def update_edge_color(self, node1, node2, color, ax):
+        x_values = [nodes[node1][0], nodes[node2][0]]
+        y_values = [nodes[node1][1], nodes[node2][1]]
+        ax.plot(x_values, y_values, color=color, lw=2, zorder=3)
 
-    # Function to find path using DFS
-    def find_path_dfs(self):
-        start = self.start_entry.get()
-        end = self.end_entry.get()
-        if start and end and start in nodes and end in nodes:
-            path = dfs(start, end, self.use_distance.get(), self.use_time.get(), self.use_accessibility.get())
-            if path:
-                self.highlight_path(path)
-                messagebox.showinfo("DFS Path", f"Path found: {' -> '.join(path)}")
-            else:
-                messagebox.showinfo("DFS Path", "No path found.")
-        else:
-            messagebox.showerror("Error", "Please enter valid start and end nodes.")
+    def update_node_color(self, node, color, ax):
+        x, y = nodes[node]
+        ax.scatter(x, y, s=50, color=color, zorder=4)
 
-# Load campus map as background
-img = plt.imread("CSUF-Smart-Campus-Navigation-System/campus_map.png")
+    def clear_paths(self):
+        self.ax_bfs.clear()
+        self.ax_dfs.clear()
+        self.update_graph(self.ax_bfs)
+        self.update_graph(self.ax_dfs)
+        self.canvas_bfs.draw_idle()
+        self.canvas_dfs.draw_idle()
 
 # Initialize the GUI application
 root = tk.Tk()

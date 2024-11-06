@@ -184,6 +184,7 @@ class CampusNavigationSystemGUI:
         self.mst = []  # List to store edges in the MST
         self.edge_list = []  # Priority queue for candidate edges
         
+        self.performance_data = {}  # Dictionary to store performance data for each algorithm
         self.step = 0  # Variable to track the current step in the MST construction
 
         self.bfs_complete = False  # Flag to indicate if BFS has completed
@@ -272,16 +273,14 @@ class CampusNavigationSystemGUI:
         
     
     def bfs(self, start, end, use_distance, use_time, use_accessibility, ax):
-
         print("Running BFS")
         
-        # Mark all the nodes as not visited
         queue = [(start, [start])]
         visited = set()
 
-        # Start timing and memory tracking for bfs
+        # Start timing and memory tracking for BFS
         start_time = timer.perf_counter()
-        tracemalloc.start()
+        tracemalloc.start()  # Start memory tracking
 
         def bfs_step():
             if not queue:
@@ -291,20 +290,19 @@ class CampusNavigationSystemGUI:
                 # End timing and memory tracking
                 end_time = timer.perf_counter()
                 current_memory, peak_memory = tracemalloc.get_traced_memory()
-                tracemalloc.stop()
+                tracemalloc.stop()  # Stop memory tracking
                 
                 # Update path on GUI
                 self.bfs_complete = True
                 app.highlight_path(path, app.ax_bfs)
-                duration = (end_time - start_time) * 1000  # Convert seconds to milliseconds
-                app.root.afterapp.root.after(0, lambda: self.handle_algorithm_completion(
-                    "BFS Traversal", duration, current_memory, peak_memory
-                ))
+                duration = (end_time - start_time) * 1000  # Convert to milliseconds
+                self.handle_algorithm_completion("BFS", duration, current_memory, peak_memory)
                 return
+            
             visited.add(current)
             for edge in edges.get(current, []):
                 node2, distance, time = edge[:3]
-                accessibility = edge[3] if len(edge) > 3 else "Unknown" # Using "Unknown" if accessibility is missing
+                accessibility = edge[3] if len(edge) > 3 else "Unknown"  # Using "Unknown" if accessibility is missing
                 if node2 not in visited and not self.bfs_complete:
                     if ((use_distance and distance <= 1000) or not use_distance) and \
                     ((use_time and time <= 2) or not use_time) and \
@@ -312,10 +310,12 @@ class CampusNavigationSystemGUI:
                         queue.append((node2, path + [node2]))
                         app.update_edge_color(current, node2, "blue", app.ax_bfs)
                         app.update_node_color(node2, "blue", app.ax_bfs)
+            
             app.canvas_bfs.draw_idle()
-            app.root.after(10, bfs_step)
+            app.root.after(1, bfs_step)
 
         bfs_step()
+
 
     def dfs(self, start, end, use_distance, use_time, use_accessibility, ax):
         
@@ -338,9 +338,7 @@ class CampusNavigationSystemGUI:
                 self.dfs_complete = True
                 app.highlight_path(path, app.ax_dfs)
                 duration = (end_time - start_time) * 1000
-                app.root.after(0, lambda: self.handle_algorithm_completion(
-                    "DFS Traversal", duration, current_memory, peak_memory
-                ))
+                self.handle_algorithm_completion("DFS", duration, current_memory, peak_memory)
                 return
             visited.add(current)
 
@@ -400,9 +398,7 @@ class CampusNavigationSystemGUI:
                 self.dijkstra_complete = True
                 app.highlight_path(path, app.ax_dijkstra)
                 duration = (end_time - start_time) * 1000
-                app.root.after(0, lambda: self.handle_algorithm_completion(
-                    "Dijkstra's Algorithm", duration, current_memory, peak_memory
-                ))
+                self.handle_algorithm_completion("Dijkstra", duration, current_memory, peak_memory)
                 return
 
             # Explore neighbors
@@ -474,13 +470,26 @@ class CampusNavigationSystemGUI:
             color = "green" if node.startswith("W") else "red"
             ax.scatter(x, y, color=color, s=15, label=node, zorder=2)
 
-    def handle_algorithm_completion(self, title, duration, current_memory, peak_memory):
-        self.root.after(0, lambda: messagebox.showinfo(
-            title,
-            f"{title} completed in {duration:.2f} ms\n"
-            f"Current memory usage: {current_memory / 1024:.2f} KB\n"
-            f"Peak memory usage: {peak_memory / 1024:.2f} KB"
-        ))
+    def handle_algorithm_completion(self, algorithm_name, duration, current_memory, peak_memory):
+        # Store performance data for each algorithm
+        self.performance_data[algorithm_name] = {
+            "duration": duration,
+            "current_memory": current_memory / 1024,  # Convert to KB
+            "peak_memory": peak_memory / 1024  # Convert to KB
+        }
+
+        # Check if all algorithms have completed
+        if len(self.performance_data) == 3:
+            # Generate and show summary
+            summary_text = "\n\n".join(
+                f"{algo}:\n"
+                f" - Duration: {data['duration']:.2f} ms\n"
+                f" - Current Memory Usage: {data['current_memory']:.2f} KB\n"
+                f" - Peak Memory Usage: {data['peak_memory']:.2f} KB"
+                for algo, data in self.performance_data.items()
+            )
+            self.root.after(0, lambda: messagebox.showinfo("Algorithm Performance Summary", summary_text))
+            self.performance_data.clear()
 
 
 # Create the main window for the GUI

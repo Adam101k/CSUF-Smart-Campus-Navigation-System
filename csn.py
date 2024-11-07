@@ -1,6 +1,7 @@
 # Written By Adam Kaci
 # Date: 11/06/2024
 
+from collections import deque
 import tkinter as tk
 import math
 import threading
@@ -247,9 +248,7 @@ class CampusNavigationSystemGUI:
     def start_traversal(self):
 
         # Reset completion flags
-        self.bfs_complete = False
-        self.dfs_complete = False
-        self.dijkstra_complete = False
+        self.reset_state()
 
         start = self.start_node_entry.get()
         end = self.end_node_entry.get()
@@ -274,7 +273,7 @@ class CampusNavigationSystemGUI:
     def bfs(self, start, end, use_distance, use_time, use_accessibility, ax):
         print("Running BFS")
         
-        queue = [(start, [start])]
+        queue = deque([(start, [start])])  # Initialize the queue with the start node and path
         visited = set()
 
         # Start timing and memory tracking for BFS
@@ -282,9 +281,9 @@ class CampusNavigationSystemGUI:
         tracemalloc.start()  # Start memory tracking
 
         def bfs_step():
-            if not queue:
+            if self.bfs_complete or not queue:
                 return
-            current, path = queue.pop(0)
+            current, path = queue.popleft()  # Use popleft() to dequeue from the front
             if current == end:
                 # End timing and memory tracking
                 end_time = timer.perf_counter()
@@ -293,9 +292,8 @@ class CampusNavigationSystemGUI:
                 
                 # Update path on GUI
                 self.bfs_complete = True
+                self.root.after(0, lambda: self.handle_algorithm_completion("BFS", (end_time - start_time) * 1000, current_memory, peak_memory))
                 app.highlight_path(path, app.ax_bfs)
-                duration = (end_time - start_time) * 1000  # Convert to milliseconds
-                self.handle_algorithm_completion("BFS", duration, current_memory, peak_memory)
                 return
             
             visited.add(current)
@@ -311,7 +309,8 @@ class CampusNavigationSystemGUI:
                         app.update_node_color(node2, "blue", app.ax_bfs)
             
             app.canvas_bfs.draw_idle()
-            app.root.after(1, bfs_step)
+            app.root.after(10, bfs_step)
+
 
         bfs_step()
 
@@ -327,6 +326,8 @@ class CampusNavigationSystemGUI:
         visited = set()
 
         def dfs_step(current, path):
+            if self.dfs_complete:
+                return
             if current == end:
                 # End timing and memory tracking
                 end_time = timer.perf_counter()
@@ -335,9 +336,8 @@ class CampusNavigationSystemGUI:
 
                 # Update path on GUI
                 self.dfs_complete = True
+                self.root.after(0, lambda: self.handle_algorithm_completion("DFS", (end_time - start_time) * 1000, current_memory, peak_memory))
                 app.highlight_path(path, app.ax_dfs)
-                duration = (end_time - start_time) * 1000
-                self.handle_algorithm_completion("DFS", duration, current_memory, peak_memory)
                 return
             visited.add(current)
 
@@ -395,9 +395,8 @@ class CampusNavigationSystemGUI:
 
                 # Update path on GUI
                 self.dijkstra_complete = True
+                self.root.after(0, lambda: self.handle_algorithm_completion("Dijkstra", (end_time - start_time) * 1000, current_memory, peak_memory))
                 app.highlight_path(path, app.ax_dijkstra)
-                duration = (end_time - start_time) * 1000
-                self.handle_algorithm_completion("Dijkstra", duration, current_memory, peak_memory)
                 return
 
             # Explore neighbors
@@ -489,6 +488,13 @@ class CampusNavigationSystemGUI:
             )
             self.root.after(0, lambda: messagebox.showinfo("Algorithm Performance Summary", summary_text))
             self.performance_data.clear()
+    
+    def reset_state(self):
+        self.bfs_complete = False
+        self.dfs_complete = False
+        self.dijkstra_complete = False
+        self.performance_data.clear()
+        self.clear_paths()  # Clear any highlighted paths from previous runs
 
 
 # Create the main window for the GUI

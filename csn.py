@@ -1,5 +1,5 @@
 # Written By Adam Kaci
-# Date: 11/05/2024
+# Date: 11/06/2024
 
 import tkinter as tk
 import math
@@ -7,7 +7,6 @@ import threading
 from tkinter import messagebox
 import tracemalloc  # For tracking memory usage
 import time as timer  # For tracking time taken by algorithms
-import networkx as nx
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 

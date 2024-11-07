@@ -247,16 +247,15 @@ class CampusNavigationSystemGUI:
 
     def start_traversal(self):
 
-        # Reset completion flags
-        self.reset_state()
+        self.reset_state()  # Reset state before starting new traversal
+        tracemalloc.clear_traces()  # Clear any previous memory traces
+        tracemalloc.start()  # Start memory tracking for this traversal
 
         start = self.start_node_entry.get()
         end = self.end_node_entry.get()
 
         if start in nodes and end in nodes:
-            self.clear_paths() # Clear the previous paths from the graph
-
-            # Run BFS, DFS, and Dijkstra's algorithms in seperate threads
+            # Run BFS, DFS, and Dijkstra's algorithms in separate threads
             bfs_thread = threading.Thread(target=self.bfs, args=(start, end, self.use_distance.get(), self.use_time.get(), self.use_accessibility.get(), self.ax_bfs))
             dfs_thread = threading.Thread(target=self.dfs, args=(start, end, self.use_distance.get(), self.use_time.get(), self.use_accessibility.get(), self.ax_dfs))
             dijkstra_thread = threading.Thread(target=self.dijkstra, args=(start, end, self.use_distance.get(), self.use_time.get(), self.use_accessibility.get(), self.ax_dijkstra))
@@ -265,7 +264,6 @@ class CampusNavigationSystemGUI:
             bfs_thread.start()
             dfs_thread.start()
             dijkstra_thread.start()
-
         else:
             messagebox.showerror("Error", "Invalid start or end node entered")
         
@@ -288,16 +286,16 @@ class CampusNavigationSystemGUI:
                 # End timing and memory tracking
                 end_time = timer.perf_counter()
                 current_memory, peak_memory = tracemalloc.get_traced_memory()
-                tracemalloc.stop()  # Stop memory tracking
                 
                 # Update path on GUI
                 self.bfs_complete = True
                 self.root.after(0, lambda: self.handle_algorithm_completion("BFS", (end_time - start_time) * 1000, current_memory, peak_memory))
                 app.highlight_path(path, app.ax_bfs)
                 return
-            
+            step_count = 0
             visited.add(current)
             for edge in edges.get(current, []):
+                step_count += 1
                 node2, distance, time = edge[:3]
                 accessibility = edge[3] if len(edge) > 3 else "Unknown"  # Using "Unknown" if accessibility is missing
                 if node2 not in visited and not self.bfs_complete:
@@ -307,6 +305,8 @@ class CampusNavigationSystemGUI:
                         queue.append((node2, path + [node2]))
                         app.update_edge_color(current, node2, "blue", app.ax_bfs)
                         app.update_node_color(node2, "blue", app.ax_bfs)
+                        app.canvas_bfs.draw_idle()
+                        app.root.after(10, bfs_step)
             
             app.canvas_bfs.draw_idle()
             app.root.after(10, bfs_step)
@@ -332,7 +332,6 @@ class CampusNavigationSystemGUI:
                 # End timing and memory tracking
                 end_time = timer.perf_counter()
                 current_memory, peak_memory = tracemalloc.get_traced_memory()
-                tracemalloc.stop()
 
                 # Update path on GUI
                 self.dfs_complete = True
@@ -384,7 +383,6 @@ class CampusNavigationSystemGUI:
             if current == end:
                 end_time = timer.perf_counter()
                 current_memory, peak_memory = tracemalloc.get_traced_memory()
-                tracemalloc.stop()
 
                 # Reconstruct the path from start to end
                 path = []
@@ -478,6 +476,8 @@ class CampusNavigationSystemGUI:
 
         # Check if all algorithms have completed
         if len(self.performance_data) == 3:
+            # Stop memory tracking once all algorithms are done
+            tracemalloc.stop()
             # Generate and show summary
             summary_text = "\n\n".join(
                 f"{algo}:\n"

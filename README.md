@@ -1,4 +1,4 @@
-# Campus Navigation System README
+# Campus Navigation System
 Made by Adam Kaci as a part of the Fall 2024 CPSC 335 CSUF Course.
 
 ## Overview
